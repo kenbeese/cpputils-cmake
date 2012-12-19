@@ -4,7 +4,7 @@
 ;; Author: Chen Bin <chenbin.sh@gmail.com>
 ;; URL: http://github.com/redguardtoo/cpputils-cmake
 ;; Keywords: CMake IntelliSense Flymake
-;; Version: 0.0.5
+;; Version: 0.1.0
 
 ;; This file is not part of GNU Emacs.
 
@@ -55,6 +55,53 @@
     )
   )
 
+;; get all the possible targets
+(defun cppcm-query-targets (f)
+  (let ((vars ())
+        (re "\\(add_executable\\|add_library\\)\s*(\\([^\s]+\\)")
+        lines)
+    (setq lines (cppcm-readlines f))
+    (dolist (l lines)
+      (when (string-match re l)
+        (push (list (downcase (match-string 1 l)) (match-string 2 l)) vars)
+        )
+      )
+    vars
+    )
+  )
+;; get all the possible targets
+;; @return matched line, use (match-string 2 line) to get results
+(defun cppcm-match-all-lines (f)
+  (let ((vars ())
+        (re "\\(add_executable|add_library\\)\s*(\\([^\s]+\\)")
+        lines)
+    (setq lines (cppcm-readlines f))
+    (catch 'brk
+      (dolist (l lines)
+        (when (string-match re l)
+          (push l vars)
+          )
+        )
+      )
+    vars
+    )
+  )
+
+(defun cppcm-query-match-line (f re)
+  "return match line"
+  (let (ml lines)
+    (setq lines (cppcm-readlines f))
+    (catch 'brk
+      (dolist (l lines)
+        (when (string-match re l)
+          (setq ml l)
+          (throw 'brk t)
+          )
+        )
+      )
+    ml
+    )
+  )
 ;; find the first line in CMakeCache.txt and assume it's the root src directory
 ;; kind of hack
 (defun cppcm-get-source-dir (d)
@@ -119,11 +166,49 @@ White space here is any of: space, tab, emacs newline (line feed, ASCII 10)."
     v
   ))
 
-(defun cppcm-create-one-makefile (root-src-dir build-dir cm executable mk)
+;; @return full path of executable and we are sure it exists
+(defun cppcm-guess-exe-full-path (exe-dir tgt)
+  (let (p
+        (type (car tgt))
+        (e (cadr tgt))
+        )
+    (if (string= type "add_executable")
+        (progn
+          ;; application bundle on OS X?
+          (setq p (concat exe-dir e (if (eq system-type 'darwin) (concat ".app/Contents/MacOS/" e))))
+          ;; maybe the guy on Mac prefer raw application? try again.
+          (if (not (file-exists-p p)) (setq p (concat exe-dir e)))
+          (if (not (file-exists-p p)) (setq p nil))
+          )
+      (if (file-exists-p (concat exe-dir "lib" e ".a"))
+          (setq p (concat exe-dir "lib" e ".a"))
+        (if (file-exists-p (concat exe-dir "lib" e ".so"))
+            (setq p (concat exe-dir "lib" e ".so"))
+          (if (file-exists-p (concat exe-dir "lib" e ".dylib"))
+              (setq p (concat exe-dir "lib" e ".dylib"))
+            (setq p nil)
+            ))))
+    p
+    ))
+
+(defun cppcm-get-exe-dir-path-current-buffer ()
+  (let (cm
+        exe-path
+        )
+    (setq cm (concat (file-name-as-directory (file-name-directory buffer-file-name)) "CMakeLists.txt"))
+    (setq exe-path (gethash (concat cm "exe-dir") cppcm-hash))
+    exe-path
+    )
+  )
+
+(defun cppcm-create-one-makefile (root-src-dir build-dir cm tgt mk)
   (let (flag-make
         cppflags
         exe-dir
         exe-full-path
+        (executable (cadr tgt))
+        ml
+        lang-compiler
         )
     (setq exe-dir (concat
                    (directory-file-name build-dir)
@@ -136,29 +221,17 @@ White space here is any of: space, tab, emacs newline (line feed, ASCII 10)."
            ".dir/flags.make"
            ))
     ;; try to guess the executable file full path
-    (setq exe-full-path
-          (concat
-           exe-dir
-           executable
-           (if (eq system-type 'darwin) (concat ".app/Contents/MacOS/" executable))
-           )
-          )
-    (if (not (file-exists-p exe-full-path))
-        (setq exe-full-path (concat exe-dir executable))
-        )
-    (if (not (file-exists-p exe-full-path))
-        (setq exe-full-path nil)
-        )
-    (puthash (concat cm "exe-full-path") exe-full-path cppcm-hash)
-    (when (file-exists-p flag-make) ;if it's the first time we use cmake
-      (let ((lang-compiler (cppcm-read-lang-compiler flag-make)))
-        (setq cppflags (if (equal (car lang-compiler)  "Fortran")
-                           (cppcm-trim-cppflags (cppcm-query-var flag-make "\s*Fortran_FLAGS\s*=\s*\\(.*\\)"))
-                         (cppcm-trim-cppflags (cppcm-query-var flag-make "\s*CXX_FLAGS\s*=\s*\\(.*\\)"))))
+    (setq exe-full-path (cppcm-guess-exe-full-path exe-dir tgt))
+    (puthash (concat cm "exe-dir") exe-dir cppcm-hash)
+    (when exe-full-path
+      (puthash (concat cm "exe-full-path") exe-full-path cppcm-hash)
+      (setq ml (cppcm-query-match-line flag-make "\s*\\w*?_FLAGS\s*=\s*\\(.*\\)"))
+      (when (and (file-exists-p flag-make) ml)
+        (setq cppflags (cppcm-trim-cppflags (match-string 1 ml)))
         (puthash cm cppflags cppcm-hash)
         (with-temp-file mk
-                      (insert (cppcm-mk-str lang-compiler flag-make))
-                      )
+          (setq lang-compiler (cppcm-read-lang-compiler flag-make))
+          (insert (cppcm-mk-str (cadr lang-compiler) (car lang-compiler) flag-make)))
         )
       )
     )
@@ -177,15 +250,15 @@ White space here is any of: space, tab, emacs newline (line feed, ASCII 10)."
     v
     ))
 
-(defun cppcm-mk-str (lang-compiler flag-make)
+(defun cppcm-mk-str (compiler lang flag-make)
   (concat "# Generated by " cppcm-prog ".\n"
           "include " flag-make "\n"
           ".PHONY: check-syntax\ncheck-syntax:\n\t"
-          (cadr lang-compiler)
+          compiler
           " -o /dev/null ${"
-          (car lang-compiler)
+          lang
           "_FLAGS} ${"
-          (car lang-compiler)
+          lang
           "_DEFINES} -S ${CHK_SOURCES}"
           ))
 
@@ -194,19 +267,24 @@ White space here is any of: space, tab, emacs newline (line feed, ASCII 10)."
   (let ((base src-dir)
         cm
         mk
-        executable
         subdir
+        possible-targets
+        tgt
+        e
         )
-                                        ; search all the subdirectory for CMakeLists.txt
+    ;; search all the subdirectory for CMakeLists.txt
     (setq cm (concat (file-name-as-directory src-dir) "CMakeLists.txt"))
-    ;; open CMakeLists.txt and find add_executable
+    ;; open CMakeLists.txt and find
     (when (file-exists-p cm)
-      (setq executable (cppcm-query-var cm "\s*add_executable\s*(\\([^\s]+\\)"))
-      ;; (setq executable (cppcm-query-var cm "\s*add_executable(\\s*\\([\\$\\{\\}\\w]+\\)"))
-      (when executable
-        (setq executable (if (string= (substring executable 0 2) "${") (cppcm-guess-var (substring executable 2 -1) cm) executable))
-        (setq mk (concat (file-name-as-directory src-dir) "Makefile"))
-        (cppcm-create-one-makefile root-src-dir build-dir cm executable mk)
+      (setq possible-targets (cppcm-query-targets cm))
+      (dolist (tgt possible-targets)
+        ;; if the target is ${VAR_NAME}, we need query CMakeLists.txt to find actual value
+        ;; of the target
+        (setq e (cadr tgt))
+        (setq e (if (string= (substring e 0 2) "${") (cppcm-guess-var (substring e 2 -1) cm) e))
+        (setcar (nthcdr 1 tgt) e)
+        (setq mk (concat (file-name-as-directory src-dir) cppcm-makefile-name))
+        (cppcm-create-one-makefile root-src-dir build-dir cm tgt mk)
         )
       )
     (dolist (f (directory-files base))
@@ -264,6 +342,15 @@ White space here is any of: space, tab, emacs newline (line feed, ASCII 10)."
       (cppcm-set-cxxflags-current-buffer)
       )
     )
+  )
+
+;;;###autoload
+(defun cppcm-compile ()
+  "compile the executable/library in current directory"
+  (interactive)
+  (when (and cppcm-build-dir (file-exists-p (concat cppcm-build-dir "CMakeCache.txt")))
+    (setq compile-command (concat "make -C " (cppcm-get-exe-dir-path-current-buffer))))
+  (call-interactively 'compile)
   )
 
 ;;;###autoload
