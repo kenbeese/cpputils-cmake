@@ -25,6 +25,7 @@
 (defvar cppcm-build-dir nil "The full path of build directory")
 (defvar cppcm-src-dir nil "The full path of root source directory")
 (defvar cppcm-include-dirs nil "List of include directories. Each directory string has '-I' prefix")
+(defvar cppcm-fortran-wrapper-path nil "Path wrapper for Fortran error format")
 
 (defvar cppcm-hash (make-hash-table :test 'equal))
 (defconst cppcm-prog "cpputils-cmake")
@@ -260,7 +261,8 @@ White space here is any of: space, tab, emacs newline (line feed, ASCII 10)."
           "_FLAGS} ${"
           lang
           "_DEFINES} -S ${CHK_SOURCES}"
-          ))
+          (when (string= lang "Fortran")
+            (concat " 2&>1 | " cppcm-fortran-wrapper-path))))
 
 
 (defun cppcm-create-flymake-makefiles(root-src-dir src-dir build-dir)
