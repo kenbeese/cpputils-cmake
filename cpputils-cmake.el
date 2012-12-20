@@ -262,7 +262,7 @@ White space here is any of: space, tab, emacs newline (line feed, ASCII 10)."
           "_FLAGS} ${"
           lang
           "_DEFINES} -S ${CHK_SOURCES}"
-          (when (string= lang "Fortran")
+          (when (and cppcm-fortran-wrapper-path (string= lang "Fortran"))
             (concat " 2&>1 | " cppcm-fortran-wrapper-path))))
 
 
