@@ -263,7 +263,7 @@ White space here is any of: space, tab, emacs newline (line feed, ASCII 10)."
           lang
           "_DEFINES} -S ${CHK_SOURCES}"
           (when (and cppcm-fortran-wrapper-path (string= lang "Fortran"))
-            (concat " 2&>1 | " cppcm-fortran-wrapper-path))))
+            (concat " 2>&1 | " cppcm-fortran-wrapper-path))))
 
 
 (defun cppcm-create-flymake-makefiles(root-src-dir src-dir build-dir)
