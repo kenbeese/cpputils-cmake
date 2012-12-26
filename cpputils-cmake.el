@@ -331,13 +331,22 @@ White space here is any of: space, tab, emacs newline (line feed, ASCII 10)."
   )
 
 ;;;###autoload
-(defun cppcm-compile ()
+(defun cppcm-compile (&optional prefix)
   "compile the executable/library in current directory"
-  (interactive)
+  (interactive "p")
   (when (and cppcm-build-dir (file-exists-p (concat cppcm-build-dir "CMakeCache.txt")))
-    (setq compile-command (concat "make -C " (cppcm-get-exe-dir-path-current-buffer))))
-  (call-interactively 'compile)
-  )
+    (let ()
+      (cond ((equal prefix 1)
+             (call-interactively 'compile))
+            ((equal prefix 4)
+             (setq compile-command (concat "make -C " (cppcm-get-exe-dir-path-current-buffer)))
+             (call-interactively 'compile)
+             )
+            ((equal prefix 16)
+             (setq compile-command (concat "make -C " cppcm-build-dir))
+             (call-interactively 'compile))
+            (t
+             (error "Prefix is  ivalid"))))))
 
 ;;;###autoload
 (defun cppcm-reload-all ()
