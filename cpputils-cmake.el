@@ -346,7 +346,7 @@ White space here is any of: space, tab, emacs newline (line feed, ASCII 10)."
              (setq compile-command (concat "make -C " cppcm-build-dir))
              (call-interactively 'compile))
             (t
-             (error "Prefix is  ivalid"))))))
+             (error "Prefix is invalid"))))))
 
 ;;;###autoload
 (defun cppcm-reload-all ()
