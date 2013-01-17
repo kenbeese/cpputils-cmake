@@ -4,7 +4,7 @@
 ;; Author: Chen Bin <chenbin.sh@gmail.com>
 ;; URL: http://github.com/redguardtoo/cpputils-cmake
 ;; Keywords: CMake IntelliSense Flymake
-;; Version: 0.1.1
+;; Version: 0.1.2
 
 ;; This file is not part of GNU Emacs.
 
@@ -225,8 +225,8 @@ White space here is any of: space, tab, emacs newline (line feed, ASCII 10)."
     (puthash (concat cm "exe-dir") exe-dir cppcm-hash)
     (when exe-full-path
       (puthash (concat cm "exe-full-path") exe-full-path cppcm-hash)
-      (setq ml (cppcm-query-match-line flag-make "\s*\\(CX\\{0,2\\}_FLAGS\\)\s*=\s*\\(.*\\)"))
-      (when (and (file-exists-p flag-make) ml)
+      (when (and (file-exists-p flag-make)
+              (setq ml (cppcm-query-match-line flag-make "\s*\\(CX\\{0,2\\}_FLAGS\\)\s*=\s*\\(.*\\)")))
         (setq is-c (if (string= (match-string 1 ml) "C_FLAGS") "C" "CXX"))
         (setq cppflags (cppcm-trim-cppflags (match-string 2 ml)))
         (puthash cm cppflags cppcm-hash)
@@ -294,8 +294,13 @@ White space here is any of: space, tab, emacs newline (line feed, ASCII 10)."
         )
     (setq cm (concat (file-name-as-directory (file-name-directory buffer-file-name)) "CMakeLists.txt"))
     (setq exe-path (gethash (concat cm "exe-full-path") cppcm-hash))
-    (kill-new exe-path)
-    (message "%s => clipboard" exe-path)
+    (if exe-path
+        (progn
+          (kill-new exe-path)
+          (message "%s => clipboard" exe-path)
+          )
+      (message "executable missing! Please run 'M-x compile' at first.")
+      )
     exe-path
     )
   )
