@@ -30,6 +30,24 @@
 (defconst cppcm-prog "cpputils-cmake")
 (defconst cppcm-makefile-name "Makefile")
 
+(defvar cppcm-compile-list
+  '(cppcm-compile-current-exe-dir
+    compile
+    cppcm-compile-build-dir)
+  "The list of compile comands.
+The sequence is the calling sequence when give prefix argument.
+
+For example:
+  If you use the default sequence, such as
+  '(cppcm-compile-current-exe-dir
+    compile
+    cppcm-compile-build-dir)
+  then you can run following commands.
+'M-x cppcm-compile'         => `cppcm-compile-current-exe-dir'
+'C-u M-x cppcm-compile'     => `compile'
+'C-u C-u M-x cppcm-compile' => `cppcm-compile-build-dir'.
+")
+
 (defun cppcm-readlines (fPath)
     "Return a list of lines of a file at fPath."
       (with-temp-buffer
@@ -316,6 +334,20 @@ White space here is any of: space, tab, emacs newline (line feed, ASCII 10)."
     )
   )
 
+(defun cppcm-compile-current-exe-dir ()
+  "compile the executable/library in current directory."
+  (interactive)
+  (setq compile-command (concat "make -C " (cppcm-get-exe-dir-path-current-buffer)))
+  (call-interactively 'compile)
+  )
+
+(defun cppcm-compile-build-dir ()
+  "compile in build directory"
+  (interactive)
+  (setq compile-command (concat "make -C " cppcm-build-dir))
+  (call-interactively 'compile)
+  )
+
 ;;;###autoload
 (defun cppcm-create-or-update-flymake-files ()
   "Create flymake files used by flymake and data used by (cppcm-get-cppflags-in-current-buffer)"
@@ -337,21 +369,15 @@ White space here is any of: space, tab, emacs newline (line feed, ASCII 10)."
 
 ;;;###autoload
 (defun cppcm-compile (&optional prefix)
-  "compile the executable/library in current directory"
+  "compile the executable/library in current directory,
+default compile command or compile in the build directory.
+You can specify the sequence which compile is default
+by customize `cppcm-compile-list'."
   (interactive "p")
   (when (and cppcm-build-dir (file-exists-p (concat cppcm-build-dir "CMakeCache.txt")))
-    (let ()
-      (cond ((equal prefix 1)
-             (call-interactively 'compile))
-            ((equal prefix 4)
-             (setq compile-command (concat "make -C " (cppcm-get-exe-dir-path-current-buffer)))
-             (call-interactively 'compile)
-             )
-            ((equal prefix 16)
-             (setq compile-command (concat "make -C " cppcm-build-dir))
-             (call-interactively 'compile))
-            (t
-             (error "Prefix is invalid"))))))
+    (let ((index (round (log prefix 4))))
+      (call-interactively (nth index cppcm-compile-list))
+      )))
 
 ;;;###autoload
 (defun cppcm-reload-all ()
