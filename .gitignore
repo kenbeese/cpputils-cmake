@@ -1,5 +1,6 @@
 ### /Users/cb/.gitignore-boilerplates/Global/Emacs.gitignore
-
+build/
+Makefile
 *~
 \#*\#
 /.emacs.desktop
@@ -24,3 +25,6 @@ Session.vim
 *.tar
 *.elc
 
+GTAGS
+GPATH
+GRTAGS
